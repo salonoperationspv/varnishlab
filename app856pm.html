@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VARNISHLAB — Turn Board</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0e0e0f; --surface:#181819; --surface2:#222224; --border:#2e2e32;
+    --accent:#e8c4a0; --accent2:#c49a6c;
+    --green:#4ade80; --green-dim:#166534; --red:#f87171; --red-dim:#7f1d1d;
+    --yellow:#fbbf24;
+    --text:#f0ece6; --text-muted:#6b6b72; --text-dim:#9999a8;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
+
+  nav { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--border); background:var(--surface); position:sticky; top:0; z-index:100; gap:10px; }
+  .logo { font-family:'Syne',sans-serif; font-weight:800; font-size:17px; letter-spacing:3px; color:var(--accent); flex-shrink:0; }
+  .nav-tabs { display:flex; gap:4px; }
+  .tab-btn { padding:6px 13px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text-dim); font-family:'DM Mono',monospace; font-size:11px; letter-spacing:1px; cursor:pointer; transition:all .2s; white-space:nowrap; }
+  .tab-btn.active { background:var(--accent); color:#0e0e0f; border-color:var(--accent); font-weight:500; }
+  .clock { font-size:12px; color:var(--text-dim); letter-spacing:1px; flex-shrink:0; }
+
+  .view { display:none; padding:18px 20px; max-width:1200px; margin:0 auto; }
+  .view.active { display:block; }
+  .section-label { font-size:10px; letter-spacing:3px; color:var(--text-muted); text-transform:uppercase; margin-bottom:10px; }
+
+  .name-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:6px; }
+  .name-btn { padding:10px 5px; border-radius:8px; border:1px solid var(--border); background:var(--surface2); color:var(--text-dim); font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; transition:all .18s; text-align:center; display:flex; flex-direction:column; align-items:center; gap:3px; }
+  .name-btn:hover { border-color:var(--accent2); color:var(--text); }
+  .name-btn:active { transform:scale(.95); }
+  .name-btn.selected { border-color:var(--accent); background:rgba(232,196,160,.1); color:var(--accent); }
+  .name-btn.nb-busy  { border-color:rgba(248,113,113,.22); background:rgba(248,113,113,.04); color:var(--text); }
+  .name-btn.nb-ready { border-color:rgba(74,222,128,.22);  background:rgba(74,222,128,.04);  color:var(--text); }
+  .nb-dot   { width:6px; height:6px; border-radius:50%; }
+  .nb-dot.ready { background:var(--green); }
+  .nb-dot.busy  { background:var(--red); }
+  .nb-sub   { font-size:9px; color:var(--text-muted); }
+  .nb-order { font-size:9px; color:var(--text-muted); font-weight:500; }
+  .name-btn.selected .nb-sub { color:var(--accent2); }
+
+  /* CHECK-IN */
+  .checkin-wrap { max-width:680px; }
+  .checkin-info { font-size:12px; color:var(--text-muted); margin-bottom:16px; line-height:1.7; padding:12px 14px; background:var(--surface); border-radius:10px; border-left:2px solid var(--accent2); }
+  .ci-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(88px,1fr)); gap:7px; margin-bottom:18px; }
+  .ci-btn { padding:12px 6px; border-radius:8px; border:1px solid var(--border); background:var(--surface2); color:var(--text-dim); font-family:'DM Mono',monospace; font-size:12px; cursor:pointer; transition:all .18s; text-align:center; display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .ci-btn:hover { border-color:var(--accent2); color:var(--text); }
+  .ci-btn:active { transform:scale(.95); }
+  .ci-btn.checked-in { border-color:var(--green); background:rgba(74,222,128,.07); color:var(--green); cursor:default; pointer-events:none; }
+  .ci-order { font-size:10px; font-weight:500; }
+  .ci-time  { font-size:9px; color:var(--text-muted); }
+  .ci-btn.checked-in .ci-time { color:rgba(74,222,128,.7); }
+  .done-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+  .done-row:last-child { border-bottom:none; }
+  .done-order { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; color:var(--accent); width:28px; }
+  .done-name  { font-size:13px; font-weight:500; flex:1; }
+  .done-time  { font-size:11px; color:var(--text-muted); }
+  .undo-btn { font-size:10px; color:var(--text-muted); cursor:pointer; padding:3px 7px; border:1px solid var(--border); border-radius:5px; background:none; font-family:'DM Mono',monospace; }
+  .undo-btn:hover { color:var(--red); border-color:var(--red-dim); }
+  .reset-day-btn { margin-top:16px; padding:9px 18px; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-family:'DM Mono',monospace; font-size:11px; letter-spacing:1px; cursor:pointer; transition:all .2s; }
+  .reset-day-btn:hover { border-color:var(--red-dim); color:var(--red); }
+
+  /* FD */
+  .fd-grid { display:grid; grid-template-columns:1fr; gap:16px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:15px; }
+  .assign-for { font-size:10px; color:var(--text-muted); margin-bottom:6px; letter-spacing:1px; }
+  .assign-for span { color:var(--accent); font-size:11px; }
+  .assign-input-row { display:flex; gap:8px; align-items:center; }
+  .form-input { flex:1; padding:9px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:'DM Mono',monospace; font-size:13px; outline:none; transition:border-color .2s; }
+  .form-input:focus { border-color:var(--accent2); }
+  .assign-btn { padding:9px 15px; background:var(--accent); color:#0e0e0f; border:none; border-radius:8px; font-family:'Syne',sans-serif; font-weight:700; font-size:12px; letter-spacing:2px; cursor:pointer; transition:all .2s; white-space:nowrap; }
+  .assign-btn:hover { background:var(--accent2); }
+  .assign-btn:active { transform:scale(.97); }
+  .board-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:4px; }
+  .board-table th { text-align:left; padding:7px 8px; color:var(--text-muted); font-size:10px; letter-spacing:2px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .board-table td { padding:0; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .board-table tr:last-child td { border-bottom:none; }
+  .board-table tr:hover td { background:rgba(255,255,255,.015); }
+  .tt-order { padding:8px 4px 8px 8px; font-family:'Syne',sans-serif; font-size:16px; font-weight:800; color:var(--accent); width:28px; }
+  .tt-name { padding:8px 8px 8px 4px; font-size:13px; font-weight:500; display:flex; align-items:center; gap:6px; min-width:80px; }
+  .status-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .dot-ready { background:var(--green); box-shadow:0 0 5px var(--green); }
+  .dot-busy  { background:var(--red);   box-shadow:0 0 5px var(--red); }
+  .turns-row { display:flex; gap:4px; padding:7px 5px; flex-wrap:wrap; align-items:center; }
+  .turn-chip { display:flex; flex-direction:column; align-items:center; gap:2px; min-width:46px; padding:4px 5px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); }
+  .turn-chip.current { border-color:var(--yellow); background:rgba(251,191,36,.08); box-shadow:0 0 8px rgba(251,191,36,.1); }
+  .turn-chip.done    { border-color:var(--green-dim); background:rgba(74,222,128,.04); opacity:.5; }
+  .turn-chip.skip    { border-color:var(--red-dim); background:rgba(248,113,113,.08); opacity:.7; }
+  .turn-num { font-size:9px; color:var(--text-muted); letter-spacing:1px; }
+  .turn-chip.current .turn-num { color:var(--yellow); }
+  .turn-service { font-size:11px; color:var(--text-dim); white-space:nowrap; }
+  .turn-chip.current .turn-service { color:var(--text); font-weight:500; }
+  .status-cell { padding:7px 8px; }
+  .status-badge { padding:3px 9px; border-radius:20px; font-size:10px; letter-spacing:1.5px; font-weight:500; cursor:pointer; transition:all .2s; white-space:nowrap; display:inline-block; border:1px solid transparent; }
+  .badge-ready { background:rgba(74,222,128,.1); color:var(--green); border-color:var(--green-dim); }
+  .badge-busy  { background:rgba(248,113,113,.1); color:var(--red);   border-color:var(--red-dim); }
+
+
+  /* TECH */
+  .tech-my-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; margin-bottom:16px; position:relative; overflow:hidden; }
+  .tech-my-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--accent),var(--accent2)); }
+  .back-link { font-size:11px; color:var(--text-muted); cursor:pointer; margin-bottom:14px; display:inline-flex; align-items:center; gap:5px; letter-spacing:1px; }
+  .back-link:hover { color:var(--text-dim); }
+  .my-turn-label   { font-size:10px; letter-spacing:3px; color:var(--text-muted); margin-bottom:4px; }
+  .my-turn-num     { font-family:'Syne',sans-serif; font-size:54px; font-weight:800; color:var(--accent); line-height:1; margin-bottom:2px; }
+  .my-turn-service { font-size:22px; font-weight:500; color:var(--text); margin-bottom:14px; }
+  .my-status-row   { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .big-ready-btn { padding:11px 22px; background:var(--green); color:#0a1a0f; border:none; border-radius:10px; font-family:'Syne',sans-serif; font-weight:700; font-size:13px; letter-spacing:2px; cursor:pointer; transition:all .2s; }
+  .big-ready-btn:hover { background:#22c55e; transform:translateY(-1px); }
+  .big-ready-btn:disabled { opacity:.3; cursor:not-allowed; transform:none; }
+  .my-status-txt { font-size:12px; color:var(--text-muted); }
+  .history-row { display:flex; align-items:center; gap:10px; padding:9px 12px; background:var(--surface2); border-radius:8px; border-left:3px solid transparent; margin-bottom:6px; }
+  .history-row.turn-active { border-left-color:var(--yellow); background:rgba(251,191,36,.05); }
+  .history-row.turn-done   { border-left-color:var(--green-dim); }
+  .h-num     { font-size:11px; color:var(--text-muted); width:48px; }
+  .h-service { font-size:13px; flex:1; }
+  .h-badge   { font-size:10px; letter-spacing:1px; padding:2px 8px; border-radius:10px; }
+  .h-badge.active { background:rgba(251,191,36,.12); color:var(--yellow); }
+  .h-badge.done   { background:rgba(74,222,128,.1);  color:var(--green); }
+
+  /* BOARD */
+  body.role-board nav { padding:10px 20px; }
+  body.role-board nav .nav-tabs { display:none; }
+  body.role-board #view-board { padding:16px 20px; max-width:none; }
+  body.role-board .board-view-grid { grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; }
+  body.role-board .bc-name { font-size:18px; }
+  body.role-board .bc-service { font-size:22px; }
+  /* Check-in iPad: larger touch targets */
+  body.role-checkin .ci-btn { padding:18px 8px; font-size:14px; }
+  body.role-checkin .ci-grid { grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px; }
+  .board-view-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:10px; }
+  .board-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; position:relative; transition:border-color .2s; }
+  .board-card.busy  { border-color:rgba(248,113,113,.28); }
+  .board-card.ready { border-color:rgba(74,222,128,.28); }
+  .bc-badge { position:absolute; top:12px; right:12px; width:7px; height:7px; border-radius:50%; }
+  .bc-badge.ready { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .bc-badge.busy  { background:var(--red); }
+  .bc-order   { font-size:10px; color:var(--text-muted); margin-bottom:2px; letter-spacing:1px; }
+  .bc-name    { font-family:'Syne',sans-serif; font-weight:700; font-size:14px; margin-bottom:6px; letter-spacing:1px; }
+  .bc-current { font-size:10px; color:var(--text-muted); margin-bottom:3px; }
+  .bc-service { font-size:17px; font-weight:500; color:var(--accent); margin-bottom:10px; }
+  .bc-turns   { display:flex; gap:3px; flex-wrap:wrap; }
+  .bc-chip { font-size:10px; padding:2px 5px; border-radius:4px; background:var(--surface2); color:var(--text-muted); border:1px solid var(--border); }
+  .bc-chip.active { background:rgba(251,191,36,.12); color:var(--yellow); border-color:rgba(251,191,36,.28); }
+  .bc-chip.done   { opacity:.35; text-decoration:line-through; }
+
+  /* SETTINGS */
+  .tech-list-item { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--surface); border:1px solid var(--border); border-radius:8px; margin-bottom:6px; transition:all .15s; }
+  .tech-list-item.inactive { opacity:.45; }
+  .tech-item-name { flex:1; font-size:13px; font-weight:500; letter-spacing:.5px; }
+  .tech-item-order { font-family:'Syne',sans-serif; font-size:15px; font-weight:800; color:var(--accent); width:24px; }
+  .tl-btn { padding:5px 11px; border-radius:6px; font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; cursor:pointer; border:1px solid var(--border); background:transparent; color:var(--text-muted); transition:all .15s; }
+  .tl-btn:hover { color:var(--text); border-color:var(--text-dim); }
+  .tl-btn.danger:hover { color:var(--red); border-color:var(--red-dim); }
+  .tl-btn.up:hover { color:var(--accent); border-color:var(--accent2); }
+
+  /* HISTORY */
+  .hist-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:4px; }
+  .hist-table th { text-align:left; padding:7px 8px; color:var(--text-muted); font-size:10px; letter-spacing:2px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .hist-table td { padding:0; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .hist-table tr:last-child td { border-bottom:none; }
+  .hist-date-badge { display:inline-block; padding:4px 12px; border-radius:20px; background:rgba(212,168,83,.1); border:1px solid rgba(212,168,83,.3); color:var(--accent); font-size:11px; letter-spacing:1px; margin-bottom:14px; }
+
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(70px); background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:11px 18px; font-size:12px; color:var(--text); z-index:300; transition:transform .28s; white-space:nowrap; pointer-events:none; }
+  .toast.show { transform:translateX(-50%) translateY(0); }
+  ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-track { background:transparent; } ::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">VARNISHLAB</div>
+  <div class="nav-tabs">
+    <button class="tab-btn" onclick="switchView('checkin')">CHECK-IN</button>
+    <button class="tab-btn active" onclick="switchView('fd')">FD</button>
+    <button class="tab-btn" onclick="switchView('tech')">THỢ</button>
+    <button class="tab-btn" onclick="switchView('board')">BOARD</button>
+    <button class="tab-btn" onclick="switchView('history')">HISTORY</button>
+    <button class="tab-btn" onclick="switchView('settings')">⚙ THỢ</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px"><div id="syncDot" style="width:7px;height:7px;border-radius:50%;background:var(--text-muted);flex-shrink:0;transition:background .3s" title="Trạng thái sync"></div><div class="clock" id="clock">--:--</div></div>
+</nav>
+
+<!-- CHECK-IN -->
+<div class="view" id="view-checkin">
+  <div class="checkin-wrap">
+    <div class="section-label" style="margin-bottom:8px">Check-in Hôm Nay</div>
+    <div class="checkin-info">Thợ nào vô tiệm thì bấm tên để check-in. Thứ tự check-in = thứ tự nhận turn cả ngày.</div>
+    <div class="ci-grid" id="ciGrid"></div>
+    <div id="ciDoneWrap" style="display:none">
+      <div class="section-label" style="margin-top:4px;margin-bottom:10px">Đã Check-in — Thứ Tự Hôm Nay</div>
+      <div id="ciDoneList"></div>
+    </div>
+    <button class="reset-day-btn" onclick="resetDay()">↺ Reset Ngày Mới</button>
+  </div>
+</div>
+
+<!-- FD -->
+<div class="view active" id="view-fd">
+  <div class="fd-grid">
+    <div>
+      <div class="section-label">Assign Turn Mới</div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="section-label" style="margin-bottom:9px">Chọn Thợ <span style="color:var(--text-muted);font-weight:normal;letter-spacing:0;text-transform:none;font-size:10px">— theo thứ tự vô tiệm</span></div>
+        <div class="name-grid" id="fdNameGrid"></div>
+        <div id="fdInputRow" style="display:none;margin-top:12px">
+          <div class="assign-for">Dịch vụ cho <span id="fdForName"></span></div>
+          <div class="assign-input-row">
+            <input class="form-input" id="inpService" placeholder="P3, F7R, GM2…" style="text-transform:uppercase" />
+            <button class="assign-btn" onclick="assignTurn()">＋ ASSIGN</button>
+          </div>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:#60a5fa;padding:5px 10px;border:1px solid rgba(96,165,250,.3);border-radius:6px;background:rgba(96,165,250,.06);">
+              <input type="checkbox" id="freeToggle" style="width:14px;height:14px;accent-color:#60a5fa;cursor:pointer;" />
+              ☀ Free turn
+            </label>
+            <span style="font-size:10px;color:var(--text-muted)"><span style="color:var(--red)">✕</span> Skip: X</span>
+            <span style="font-size:10px;color:var(--text-muted)"><span style="color:#a78bfa">½</span> Half: M3/, GM5/…</span>
+            <span style="font-size:10px;color:var(--text-muted)"><span style="color:#f59e0b">★</span> Bonus: CC, PC, WAX, NA, RM…</span>
+          </div>
+        </div>
+      </div>
+      <div class="section-label">Bảng Turn Hôm Nay</div>
+      <table class="board-table">
+        <thead><tr><th>#</th><th style="color:#f59e0b;min-width:100px">BONUS / FREE</th><th>TÊN THỢ</th><th>TURNS</th><th>STATUS</th></tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TECH -->
+<div class="view" id="view-tech">
+  <div id="techPickScreen">
+    <div class="section-label" style="margin-bottom:10px">Bấm Vào Tên Của Bạn</div>
+    <div class="name-grid" id="techNameGrid" style="gap:7px"></div>
+  </div>
+  <div id="techDetailScreen" style="display:none">
+    <span class="back-link" onclick="techGoBack()">← Đổi tên</span>
+    <div class="tech-my-card" id="myCard">
+      <div class="my-turn-label">TURN HIỆN TẠI</div>
+      <div class="my-turn-num" id="myTurnNum">—</div>
+      <div class="my-turn-service" id="myTurnService">Chưa có turn</div>
+      <div class="my-status-row">
+        <button class="big-ready-btn" id="myReadyBtn" onclick="markMyReady()" disabled>✓ READY</button>
+        <div class="my-status-txt" id="myStatusLabel">Đang chờ turn...</div>
+      </div>
+    </div>
+    <div class="section-label">Lịch Sử Turn Hôm Nay</div>
+    <div id="myHistory"></div>
+  </div>
+</div>
+
+<!-- BOARD -->
+<div class="view" id="view-board">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px">
+    <div class="section-label" style="margin-bottom:0">Live Board</div>
+    <div id="boardDate" style="font-size:12px;color:var(--text-muted);letter-spacing:1px"></div>
+  </div>
+  <div class="board-view-grid" id="boardGrid"></div>
+</div>
+
+<!-- HISTORY -->
+<div class="view" id="view-history">
+  <div style="max-width:900px;margin:0 auto">
+    <div class="section-label" style="margin-bottom:12px">Xem Lại Bảng Turn</div>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px">
+      <div>
+        <div style="font-size:10px;letter-spacing:1px;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase">Tháng</div>
+        <select id="histMonthSel" class="form-input" style="width:140px;flex:none" onchange="loadHistMonth()"></select>
+      </div>
+      <div>
+        <div style="font-size:10px;letter-spacing:1px;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase">Ngày</div>
+        <select id="histDaySel" class="form-input" style="width:160px;flex:none" onchange="loadHistDay()"></select>
+      </div>
+      <div id="histLoading" style="font-size:11px;color:var(--text-muted);padding-bottom:10px;display:none">Đang tải...</div>
+    </div>
+    <div id="histContent">
+      <div style="color:var(--text-muted);font-size:12px">Chọn ngày ở trên để xem bảng turn</div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div class="view" id="view-settings">
+  <div style="max-width:560px;margin:0 auto">
+    <div class="section-label" style="margin-bottom:14px">Quản Lý Danh Sách Thợ</div>
+
+    <!-- Add new tech -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-label" style="margin-bottom:10px">Thêm Thợ Mới</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="newTechInp" class="form-input" placeholder="Tên thợ (VD: LISA)" style="text-transform:uppercase;flex:1" autocomplete="off" autocorrect="off" spellcheck="false" />
+        <button onclick="addTech()" style="padding:9px 16px;background:var(--accent);color:#0e0e0f;border:none;border-radius:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;letter-spacing:1px;cursor:pointer;white-space:nowrap">＋ THÊM</button>
+      </div>
+    </div>
+
+    <!-- Tech list -->
+    <div class="section-label" style="margin-bottom:10px">Danh Sách Thợ (<span id="techCount">0</span>)</div>
+    <div id="settingsTechList"></div>
+
+    <!-- Sync note -->
+    <div style="margin-top:16px;font-size:11px;color:var(--text-muted);line-height:1.7;padding:10px 12px;background:var(--surface);border-radius:8px;border-left:2px solid var(--border)">
+      Thay đổi sẽ lưu vào app. Để đồng bộ lên Google Sheets: mở Sheets → tab TECHS → chỉnh tay.<br>
+      Thợ bị ẩn vẫn còn trong Sheets — chỉ ẩn khỏi màn hình check-in và assign.
+    </div>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div id="editOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;width:300px;animation:pop .18s ease;">
+    <div style="font-size:11px;letter-spacing:2px;color:var(--text-muted);margin-bottom:14px;text-transform:uppercase">Sửa Turn</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Thợ: <span id="editTechName" style="color:var(--accent)"></span></div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:10px;letter-spacing:1px;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase">Dịch Vụ</div>
+      <input id="editServiceInp" style="width:100%;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;text-transform:uppercase" autocomplete="off" autocorrect="off" spellcheck="false" />
+    </div>
+    <div id="editFreeRow" style="display:none;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:11px;color:#60a5fa;padding:6px 10px;border:1px solid rgba(96,165,250,.3);border-radius:6px;background:rgba(96,165,250,.06);width:fit-content;">
+        <input type="checkbox" id="editFreeToggle" style="width:14px;height:14px;accent-color:#60a5fa;cursor:pointer;" />
+        ☀ Free turn
+      </label>
+    </div>
+    <div id="skipRow" style="margin-bottom:10px">
+      <button onclick="skipEditTurn()" id="skipBtn" style="width:100%;padding:9px;background:rgba(248,113,113,.08);border:1px solid var(--red-dim);border-radius:8px;color:var(--red);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;cursor:pointer;">✕  SKIP TURN NÀY</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button onclick="closeEditModal()" style="flex:1;padding:9px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;">Huỷ</button>
+      <button onclick="deleteEditTurn()" style="padding:9px 14px;background:rgba(248,113,113,.12);border:1px solid var(--red-dim);border-radius:8px;color:var(--red);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;">Xoá</button>
+      <button onclick="confirmEditTurn()" style="flex:1;padding:9px;background:var(--accent);border:none;border-radius:8px;color:#0e0e0f;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;letter-spacing:1px;cursor:pointer;">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Default tech list — editable via Settings tab
+const DEFAULT_TECHS = [
+  'VANNY','TOMMY','JENNA','BELLA','MARCH','KIM','NANCY','BEN','MOON',
+  'TINA','KENNY','ANGEL','SEAN','ABI','KAY','HANNA','ANDREA','BILL',
+  'ROSIE','CHRIS','HELEN','VIVI','HANA'
+];
+
+// techList: [{name, active}] — persisted in localStorage
+function loadTechList() {
+  try {
+    const saved = localStorage.getItem('vnl_techs');
+    if (saved) return JSON.parse(saved);
+  } catch(e) {}
+  return DEFAULT_TECHS.map(n => ({ name: n, active: true }));
+}
+function saveTechList(list) {
+  localStorage.setItem('vnl_techs', JSON.stringify(list));
+  // Sync to Sheets if connected
+  if (API_URL) {
+    apiPost({ action: 'updateTechList', techs: list.filter(t => t.active).map(t => t.name) });
+  }
+}
+function getActiveTechs() {
+  return techList.filter(t => t.active).map(t => t.name);
+}
+
+let techList = loadTechList();
+// ALL_TECHS alias for compatibility
+Object.defineProperty(window, 'ALL_TECHS', { get: () => getActiveTechs() });
+
+// Bonus services — không tính vào turn chính thức
+// CC = color change, PC = polish change, WAX = wax, NA/NS = nail art/nail stamp
+const BONUS_PREFIXES = ['CC','PC','WAX','NA','NS','RM'];
+function isBonus(svc) {
+  const s = svc.toUpperCase().trim();
+  return BONUS_PREFIXES.some(p => s === p || s.startsWith(p+'/') || (s.startsWith(p) && s.length > p.length));
+}
+
+// Half-turn: kết thúc bằng "/" (ví dụ: M3/, GM5/)
+function isHalf(svc) { return svc.trim().endsWith('/'); }
+
+// ── GOOGLE SHEETS CONFIG + MULTI-DEVICE SYNC ─────────────────────────
+let API_URL = '';
+
+// Get API URL from: 1) ?api= in URL  2) localStorage
+function loadApiUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('api')) {
+    API_URL = params.get('api');
+    localStorage.setItem('vnl_api', API_URL);
+  } else {
+    API_URL = localStorage.getItem('vnl_api') || '';
+  }
+}
+
+// Get role from ?role= param (fd / checkin / board / tech / history)
+function getRole() {
+  return new URLSearchParams(window.location.search).get('role') || '';
+}
+
+// Show sync status dot in nav
+function setSyncDot(state) {
+  const dot = document.getElementById('syncDot');
+  if (!dot) return;
+  dot.style.background = state==='ok' ? 'var(--green)' : state==='err' ? 'var(--red)' : 'var(--yellow)';
+  dot.title = state==='ok' ? 'Đã kết nối Sheets' : state==='err' ? 'Lỗi kết nối' : 'Đang đồng bộ...';
+}
+
+async function apiGet(params) {
+  if (!API_URL) return null;
+  setSyncDot('loading');
+  try {
+    const url = API_URL + '?' + new URLSearchParams(params).toString();
+    const r = await fetch(url);
+    const d = await r.json();
+    setSyncDot('ok');
+    return d;
+  } catch(e) { setSyncDot('err'); return null; }
+}
+async function apiPost(body) {
+  if (!API_URL) return null;
+  try {
+    const r = await fetch(API_URL, { method:'POST', body: JSON.stringify(body) });
+    return await r.json();
+  } catch(e) { setSyncDot('err'); return null; }
+}
+
+// ── SYNC: pull from Sheets, update state, re-render ──────────────────
+let _syncInterval = null;
+function startSync() {
+  if (!API_URL || _syncInterval) return;
+  syncFromSheets();
+  _syncInterval = setInterval(syncFromSheets, 5000);
+}
+async function syncFromSheets() {
+  const data = await apiGet({ action:'getData' });
+  if (!data || !data.techs) return;
+  // Sheets is source of truth — overwrite local state
+  state.checkedIn = data.techs.map(t => ({ name:t.name, checkInTime:t.checkInTime, order:t.order }));
+  data.techs.forEach(t => {
+    state.techs[t.name] = {
+      status:  t.status,
+      turns:   t.turns   || [],
+      bonuses: t.bonuses || [],
+    };
+    // Rebuild turnCounter from actual turns
+    const maxTurn = Math.max(0, ...(t.turns||[]).filter(x=>!x.waitingPair).map(x=>Number(x.num)||0));
+    state.turnCounter[t.name] = maxTurn;
+  });
+  if (data.allTechs) window._allTechs = data.allTechs;
+  renderFD();
+  if (document.getElementById('view-checkin').classList.contains('active')) renderCheckIn();
+  renderBoard();
+  if (state.techSelected) renderTechView();
+}
+
+let state = {
+  checkedIn:    [],
+  techs:        {},
+  turnCounter:  {},
+  fdSelected:   null,
+  techSelected: null,
+};
+
+const getCI     = n => state.checkedIn.find(t => t.name === n);
+const getTD     = n => state.techs[n];
+// turn "active" = turn chưa xong, không phải bonus, không phải half đang chờ pair
+const getActive = n => (state.techs[n]?.turns||[]).find(t => !t.done && !t.isSkip);
+// full turn count (not counting half waiting for pair, not counting bonus)
+const fullTurnCount = n => (state.techs[n]?.turns||[]).filter(t => !t.waitingPair).length;
+
+// CLOCK
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('boardDate').textContent =
+    now.toLocaleDateString('vi-VN',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'});
+}
+setInterval(updateClock,1000); updateClock();
+
+// VIEWS
+function switchView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.querySelectorAll('.tab-btn')[{checkin:0,fd:1,tech:2,board:3,history:4,settings:5}[v]].classList.add('active');
+  if (v==='checkin') renderCheckIn();
+  if (v==='tech')    { state.techSelected=null; renderTechPick(); }
+  if (v==='board')   renderBoard();
+  if (v==='fd')      renderFD();
+  if (v==='history') initHistory();
+  if (v==='settings') renderSettings();
+}
+
+// CHECK-IN
+function renderCheckIn() {
+  const notIn = ALL_TECHS.filter(n => !getCI(n));
+  document.getElementById('ciGrid').innerHTML =
+    notIn.map(n =>
+      `<button class="ci-btn" onclick="checkIn('${n}')"><span style="font-size:13px">${n}</span></button>`
+    ).join('') +
+    state.checkedIn.map(ci =>
+      `<button class="ci-btn checked-in">
+        <span class="ci-order">#${ci.order}</span>
+        <span style="font-size:13px">${ci.name}</span>
+        <span class="ci-time">${ci.checkInTime}</span>
+      </button>`
+    ).join('');
+
+  const wrap = document.getElementById('ciDoneWrap');
+  if (state.checkedIn.length) {
+    wrap.style.display = 'block';
+    document.getElementById('ciDoneList').innerHTML = state.checkedIn.map(ci =>
+      `<div class="done-row">
+        <div class="done-order">#${ci.order}</div>
+        <div class="done-name">${ci.name}</div>
+        <div class="done-time">${ci.checkInTime}</div>
+        ${!state.techs[ci.name]?.turns.length
+          ? `<button class="undo-btn" onclick="undoCheckIn('${ci.name}')">Huỷ</button>`
+          : '<span style="font-size:10px;color:var(--text-muted)">có turn</span>'}
+      </div>`
+    ).join('');
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+function checkIn(name) {
+  if (getCI(name)) return;
+  const now  = new Date();
+  const time = now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+  state.checkedIn.push({ name, checkInTime:time, order:state.checkedIn.length+1 });
+  state.techs[name] = { status:'READY', turns:[], bonuses:[] };
+  showToast(`✓ ${name} check-in lúc ${time}`);
+  renderCheckIn(); renderFD(); renderBoard();
+  apiPost({ action:'checkIn', name }); // sync to Sheets
+}
+
+function undoCheckIn(name) {
+  if (state.techs[name]?.turns.length) { showToast('⚠ Thợ đã có turn — không thể huỷ'); return; }
+  state.checkedIn = state.checkedIn.filter(t => t.name !== name);
+  state.checkedIn.forEach((t,i) => t.order = i+1);
+  delete state.techs[name];
+  showToast(`Đã huỷ check-in ${name}`);
+  renderCheckIn(); renderFD(); renderBoard();
+}
+
+function resetDay() {
+  if (!confirm('Reset toàn bộ? Check-in và turn hôm nay sẽ bị xoá.')) return;
+  state = { checkedIn:[], techs:{}, turnCounter:{}, fdSelected:null, techSelected:null };
+  document.getElementById('fdInputRow').style.display = 'none';
+  showToast('↺ Reset xong — ngày mới bắt đầu!');
+  renderCheckIn(); renderFD(); renderTechPick(); renderBoard();
+}
+
+// ── CORE: assign turn với logic half + bonus ──────────────────
+function assignTurn() {
+  const name    = state.fdSelected;
+  const service = document.getElementById('inpService').value.trim().toUpperCase();
+  if (!name)    { showToast('⚠ Chọn thợ trước'); return; }
+  if (!service) { showToast('⚠ Nhập dịch vụ'); return; }
+  const td = state.techs[name];
+  if (!td)      { showToast('⚠ Thợ chưa check-in'); return; }
+
+  // X = SKIP TURN tức thì
+  if (service === 'X') {
+    if (!state.turnCounter[name]) state.turnCounter[name] = 0;
+    state.turnCounter[name]++;
+    const tNum = state.turnCounter[name];
+    td.turns.push({ num:tNum, service:'X', done:true, waitingPair:false, isSkip:true });
+    // status stays READY — skip không chiếm turn
+    document.getElementById('inpService').value = '';
+    state.fdSelected = null;
+    document.getElementById('fdInputRow').style.display = 'none';
+    showToast(`✕ Skip T${tNum} → ${name}`);
+    renderFD(); renderBoard();
+    apiPost({ action:'assignTurn', name, service:'X', isBonus:false, isFree:false, isHalf:false, isSkip:true });
+    return;
+  }
+
+  // BONUS: không tính turn
+  if (isBonus(service)) {
+    td.bonuses.push({ service, done:false });
+    td.status = 'BUSY';
+    document.getElementById('inpService').value = '';
+    state.fdSelected = null;
+    document.getElementById('fdInputRow').style.display = 'none';
+    showToast(`★ Bonus · ${service} → ${name}`);
+    renderFD(); renderBoard();
+    apiPost({ action:'assignTurn', name, service, isBonus:true, isFree:false, isHalf:false });
+    return;
+  }
+
+  // HALF TURN: kết thúc bằng "/"
+  if (isHalf(service)) {
+    // Kiểm tra có half đang chờ pair không
+    const waiting = td.turns.find(t => t.waitingPair);
+    if (waiting) {
+      // Ghép lại thành 1 full turn
+      waiting.service = waiting.service + service.slice(0,-1); // M3/ + M6/ → M3/M6
+      waiting.waitingPair = false;
+      waiting.done = false;
+      td.status = 'BUSY';
+      showToast(`✓ Ghép turn: ${waiting.service} → ${name}`);
+      apiPost({ action:'pairHalf', name, service: service.slice(0,-1) });
+    } else {
+      // Half đầu tiên — giữ chỗ, thợ vẫn READY (chờ nửa kia)
+      td.turns.push({ num: '½', service, done:false, waitingPair:true });
+      // Không đổi status vì chỉ nửa turn
+      showToast(`½ Half turn · ${service} → ${name} — chờ ghép`);
+      apiPost({ action:'assignTurn', name, service, isBonus:false, isFree:false, isHalf:true });
+    }
+    document.getElementById('inpService').value = '';
+    state.fdSelected = null;
+    document.getElementById('fdInputRow').style.display = 'none';
+    renderFD(); renderBoard();
+    return;
+  }
+
+  // FREE TURN: FD bấm toggle ☀
+  const isFree = document.getElementById('freeToggle').checked;
+  if (isFree) {
+    td.bonuses.push({ service, done:false, isFree:true });
+    td.status = 'BUSY';
+    document.getElementById('inpService').value = '';
+    document.getElementById('freeToggle').checked = false;
+    state.fdSelected = null;
+    document.getElementById('fdInputRow').style.display = 'none';
+    showToast(`☀ Free turn · ${service} → ${name}`);
+    renderFD(); renderBoard();
+    apiPost({ action:'assignTurn', name, service, isBonus:false, isFree:true, isHalf:false });
+    return;
+  }
+
+  // FULL TURN bình thường
+  if (!state.turnCounter[name]) state.turnCounter[name] = 0;
+  state.turnCounter[name]++;
+  const tNum = state.turnCounter[name];
+  td.turns.push({ num:tNum, service, done:false, waitingPair:false });
+  td.status = 'BUSY';
+  document.getElementById('inpService').value = '';
+  state.fdSelected = null;
+  document.getElementById('fdInputRow').style.display = 'none';
+  showToast(`✓ T${tNum} · ${service} → ${name}`);
+  renderFD(); renderBoard();
+  apiPost({ action:'assignTurn', name, service, isBonus:false, isFree:false, isHalf:false });
+}
+
+function toggleStatus(name) {
+  const td = state.techs[name];
+  if (!td) return;
+  if (td.status === 'BUSY') {
+    const a = getActive(name);
+    if (a) a.done = true;
+    // cũng mark bonus active đầu tiên done
+    const ab = (td.bonuses||[]).find(b => !b.done);
+    if (ab && !a) ab.done = true;
+    td.status = 'READY';
+    showToast(`✓ ${name} → READY`);
+  } else {
+    td.status = 'BUSY';
+    showToast(`${name} → BUSY`);
+  }
+  renderFD(); renderBoard();
+  if (state.techSelected === name) renderTechView();
+}
+
+// FD
+function renderFD() { renderFDGrid(); renderTable(); }
+
+function renderFDGrid() {
+  const grid = document.getElementById('fdNameGrid');
+  if (!state.checkedIn.length) {
+    grid.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;grid-column:1/-1">Chưa có thợ nào check-in — vào tab Check-in trước</div>';
+    return;
+  }
+  grid.innerHTML = state.checkedIn.map(ci => {
+    const td   = state.techs[ci.name];
+    const sCls = td ? td.status.toLowerCase() : 'ready';
+    const cur  = getActive(ci.name);
+    const isSel= ci.name === state.fdSelected;
+    const waiting = td?.turns.find(t => t.waitingPair);
+    const sub  = waiting ? `½ ${waiting.service}` : cur ? cur.service : fullTurnCount(ci.name)+'T';
+    return `<button class="name-btn nb-${sCls}${isSel?' selected':''}" onclick="fdPickTech('${ci.name}')">
+      <span class="nb-order">#${ci.order}</span>
+      <span class="nb-dot ${sCls}"></span>
+      <span>${ci.name}</span>
+      <span class="nb-sub" style="${waiting?'color:#a78bfa':''}">${sub}</span>
+    </button>`;
+  }).join('');
+}
+
+function fdPickTech(name) {
+  state.fdSelected = name;
+  const td = state.techs[name];
+  const waiting = td?.turns.find(t => t.waitingPair);
+  // Hint FD nếu thợ đang chờ ghép half
+  const hint = waiting ? ` (đang chờ ghép ${waiting.service})` : '';
+  document.getElementById('fdForName').textContent = name + hint;
+  document.getElementById('fdInputRow').style.display = 'block';
+  document.getElementById('inpService').value = '';
+  document.getElementById('inpService').focus();
+  renderFDGrid();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  const rows  = state.checkedIn.filter(ci => {
+    const td = state.techs[ci.name];
+    return td && (td.turns.length || td.bonuses?.length);
+  });
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:18px 8px;color:var(--text-muted);font-size:12px">Chưa có turn nào — chọn thợ ở trên và assign ↑</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(ci => {
+    const td     = state.techs[ci.name];
+    const active = getActive(ci.name);
+
+    // Render turn chips — click to edit
+    const chips = td.turns.map((t,ti) => {
+      const isCur     = !t.done && !t.waitingPair && !t.isSkip && t === active;
+      const isWaiting = t.waitingPair;
+      let cls = t.isSkip ? 'skip' : isCur ? 'current' : t.done ? 'done' : '';
+      let numLabel = t.waitingPair ? '½' : `T${t.num}`;
+      let extraStyle = isWaiting ? 'border-color:#a78bfa;background:rgba(167,139,250,.08)' : '';
+      let numColor = t.isSkip ? 'var(--red)' : isWaiting ? '#a78bfa' : '';
+      let svcStyle = t.isSkip ? 'text-decoration:line-through;color:var(--red);' : '';
+      return `<div class="turn-chip ${cls}" style="${extraStyle}cursor:pointer;" title="Bấm để sửa" onclick="openEditModal('${ci.name}','turn',${ti})">
+        <div class="turn-num" style="${numColor?'color:'+numColor:''}">✎ ${t.isSkip?'✕':numLabel}</div>
+        <div class="turn-service" style="${svcStyle}">${t.service}</div>
+      </div>`;
+    }).join('');
+
+    // Render bonus chips — click to edit (free turn = blue, bonus = gold)
+    const bonusChips = (td.bonuses||[]).map((b,bi) => {
+      const isFree = b.isFree;
+      const color  = isFree ? '#60a5fa' : '#f59e0b';
+      const bg     = isFree ? 'rgba(96,165,250,.06)' : 'rgba(245,158,11,.06)';
+      const icon   = isFree ? '✎ ☀' : '✎ ★';
+      return `<div class="turn-chip" style="border-color:${color};background:${bg};opacity:${b.done?.5:1};cursor:pointer;" title="Bấm để sửa" onclick="openEditModal('${ci.name}','bonus',${bi})">
+        <div class="turn-num" style="color:${color}">${icon}</div>
+        <div class="turn-service">${b.service}</div>
+      </div>`;
+    }).join('');
+
+    const bc = td.status === 'READY' ? 'badge-ready' : 'badge-busy';
+    return `<tr>
+      <td><div class="tt-order">#${ci.order}</div></td>
+      <td><div class="turns-row">${bonusChips || '<span style="padding:4px;color:var(--text-muted);font-size:11px">—</span>'}</div></td>
+      <td><div class="tt-name"><span class="status-dot dot-${td.status.toLowerCase()}"></span>${ci.name}</div></td>
+      <td><div class="turns-row">${chips || '<span style="padding:4px;color:var(--text-muted);font-size:11px">—</span>'}</div></td>
+      <td class="status-cell"><span class="status-badge ${bc}" onclick="toggleStatus('${ci.name}')">${td.status}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+
+// TECH
+function renderTechPick() {
+  document.getElementById('techPickScreen').style.display  = 'block';
+  document.getElementById('techDetailScreen').style.display = 'none';
+  const grid = document.getElementById('techNameGrid');
+  if (!state.checkedIn.length) {
+    grid.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Chưa có thợ nào check-in hôm nay</div>';
+    return;
+  }
+  grid.innerHTML = state.checkedIn.map(ci => {
+    const td   = state.techs[ci.name];
+    const sCls = td ? td.status.toLowerCase() : 'ready';
+    const cur  = getActive(ci.name);
+    return `<button class="name-btn nb-${sCls}" onclick="techPick('${ci.name}')" style="padding:14px 5px">
+      <span class="nb-order">#${ci.order}</span>
+      <span class="nb-dot ${sCls}"></span>
+      <span style="font-size:13px">${ci.name}</span>
+      <span class="nb-sub">${cur ? cur.service : td?.status||'READY'}</span>
+    </button>`;
+  }).join('');
+}
+
+function techPick(name) {
+  state.techSelected = name;
+  document.getElementById('techPickScreen').style.display  = 'none';
+  document.getElementById('techDetailScreen').style.display = 'block';
+  renderTechView();
+}
+function techGoBack() { state.techSelected = null; renderTechPick(); }
+
+function renderTechView() {
+  const name = state.techSelected;
+  if (!name) return;
+  const td = state.techs[name];
+  if (!td) return;
+  const active = getActive(name);
+
+  if (active && !active.waitingPair) {
+    document.getElementById('myTurnNum').textContent     = `T${active.num}`;
+    document.getElementById('myTurnService').textContent = active.service;
+    document.getElementById('myReadyBtn').disabled       = false;
+    const isBusy = td.status === 'BUSY';
+    document.getElementById('myStatusLabel').textContent = isBusy ? '🔴 Đang làm — bấm READY khi xong' : '🟢 Ready rồi!';
+    document.getElementById('myCard').style.borderColor  = isBusy ? 'rgba(248,113,113,.4)' : 'rgba(74,222,128,.4)';
+  } else if (active?.waitingPair) {
+    document.getElementById('myTurnNum').textContent     = '½';
+    document.getElementById('myTurnService').textContent = active.service + ' chờ ghép';
+    document.getElementById('myReadyBtn').disabled       = true;
+    document.getElementById('myStatusLabel').textContent = '⏳ Đang chờ ghép half turn...';
+    document.getElementById('myCard').style.borderColor  = 'rgba(167,139,250,.4)';
+  } else {
+    document.getElementById('myTurnNum').textContent     = '—';
+    document.getElementById('myTurnService').textContent = 'Chưa có turn mới';
+    document.getElementById('myReadyBtn').disabled       = true;
+    document.getElementById('myStatusLabel').textContent = '⏳ Đang chờ FD assign...';
+    document.getElementById('myCard').style.borderColor  = 'var(--border)';
+  }
+
+  const hist = document.getElementById('myHistory');
+  const allItems = [
+    ...td.turns.map(t => ({ ...t, isBonus:false })),
+    ...(td.bonuses||[]).map(b => ({ ...b, num:'★', isBonus:true, waitingPair:false })),
+  ];
+  if (!allItems.length) { hist.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Chưa có turn nào hôm nay</div>'; return; }
+
+  hist.innerHTML = allItems.map(t => {
+    const isCur     = !t.done && !t.isSkip && !t.waitingPair && !t.isBonus && t === active;
+    const isWaiting = t.waitingPair;
+    const cls       = t.isSkip ? '' : isCur ? 'turn-active' : t.done ? 'turn-done' : '';
+    const badge     = t.isSkip ? 'SKIP' : isCur ? 'ĐANG LÀM' : isWaiting ? 'CHỜ GHÉP' : t.done ? 'XONG' : '—';
+    const badgeCls  = t.isSkip ? '' : isCur ? 'active' : t.done ? 'done' : '';
+    const badgeStyle= t.isSkip ? 'background:rgba(248,113,113,.12);color:var(--red)' : '';
+    const isFreeBonus = t.isBonus && t.isFree;
+    const label     = isFreeBonus ? '☀ FREE' : t.isBonus ? '★ BONUS' : isWaiting ? '½ TURN' : `TURN ${t.num}`;
+    const labelColor= t.isSkip ? 'var(--red)' : isFreeBonus ? '#60a5fa' : t.isBonus ? '#f59e0b' : isWaiting ? '#a78bfa' : '';
+    const svcStyle  = t.isSkip ? 'text-decoration:line-through;opacity:.6' : '';
+    return `<div class="history-row ${cls}" style="${t.isSkip?'border-left-color:var(--red-dim);background:rgba(248,113,113,.04)':''}">
+      <div class="h-num" style="${labelColor?'color:'+labelColor:''}">${t.isSkip?'✕ SKIP':label}</div>
+      <div class="h-service" style="${svcStyle}">${t.service}</div>
+      <div class="h-badge ${badgeCls}" style="${badgeStyle}">${badge}</div>
+    </div>`;
+  }).join('');
+}
+
+function markMyReady() {
+  const name = state.techSelected;
+  const td   = state.techs[name];
+  if (!td) return;
+  const a = getActive(name);
+  if (a && !a.waitingPair) a.done = true;
+  td.status = 'READY';
+  showToast(`✓ ${name} — READY!`);
+  renderFD(); renderBoard(); renderTechView();
+  apiPost({ action:'setReady', name });
+}
+
+// BOARD
+function renderBoard() {
+  const grid = document.getElementById('boardGrid');
+  if (!state.checkedIn.length) { grid.innerHTML = '<div style="color:var(--text-muted);font-size:13px">Chưa có thợ nào check-in hôm nay</div>'; return; }
+  grid.innerHTML = state.checkedIn.map(ci => {
+    const td = state.techs[ci.name];
+    if (!td) return '';
+    const cur   = getActive(ci.name);
+    const sCls  = td.status.toLowerCase();
+    const chips = td.turns.map(t => {
+      const isCur     = !t.done && !t.isSkip && !t.waitingPair && t === cur;
+      const isWaiting = t.waitingPair;
+      const skipStyle = t.isSkip ? 'border-color:var(--red-dim);color:var(--red);text-decoration:line-through;opacity:.6' : '';
+      const halfStyle = isWaiting ? 'border-color:#a78bfa;color:#a78bfa' : '';
+      return `<span class="bc-chip ${isCur?'active':t.done&&!t.isSkip?'done':''}"
+        style="${skipStyle||halfStyle}">
+        ${t.isSkip?'✕':isWaiting?'½':''} ${t.service}
+      </span>`;
+    }).join('');
+    const bonusChips = (td.bonuses||[]).filter(b=>!b.done).map(b => {
+      const c = b.isFree ? '#60a5fa' : '#f59e0b';
+      const icon = b.isFree ? '☀' : '★';
+      return `<span class="bc-chip" style="border-color:${c};color:${c}">${icon} ${b.service}</span>`;
+    }).join('');
+
+    const curDisplay = cur && !cur.waitingPair ? cur.service : cur?.waitingPair ? '½ ' + cur.service : '—';
+    const curLabel   = cur && !cur.waitingPair ? `T${cur.num} · Đang làm` : cur?.waitingPair ? 'Chờ ghép ½' : 'Chờ turn';
+    return `<div class="board-card ${sCls}">
+      <div class="bc-badge ${sCls}"></div>
+      <div class="bc-order">#${ci.order}</div>
+      <div class="bc-name">${ci.name}</div>
+      <div class="bc-current">${curLabel}</div>
+      <div class="bc-service">${curDisplay}</div>
+      <div class="bc-turns">${chips}${bonusChips}</div>
+    </div>`;
+  }).join('');
+}
+
+// EDIT MODAL
+let editCtx = null; // {name, kind:'turn'|'bonus', idx}
+
+function openEditModal(name, kind, idx) {
+  const td = state.techs[name];
+  const item = kind === 'bonus' ? td.bonuses[idx] : td.turns[idx];
+  if (!item) return;
+  editCtx = { name, kind, idx };
+  document.getElementById('editTechName').textContent = name;
+  document.getElementById('editServiceInp').value = item.service;
+  const freeRow = document.getElementById('editFreeRow');
+  const skipRow = document.getElementById('skipRow');
+  if (kind === 'bonus') {
+    freeRow.style.display = 'block';
+    document.getElementById('editFreeToggle').checked = !!item.isFree;
+    skipRow.style.display = 'none'; // no skip for bonus
+  } else {
+    freeRow.style.display = 'none';
+    skipRow.style.display = 'block';
+    // Update button text based on current skip state
+    const btn = document.getElementById('skipBtn');
+    if (item.isSkip) {
+      btn.textContent = '↩  UNDO SKIP';
+      btn.style.background = 'rgba(74,222,128,.08)';
+      btn.style.borderColor = 'var(--green-dim)';
+      btn.style.color = 'var(--green)';
+    } else {
+      btn.textContent = '✕  SKIP TURN NÀY';
+      btn.style.background = 'rgba(248,113,113,.08)';
+      btn.style.borderColor = 'var(--red-dim)';
+      btn.style.color = 'var(--red)';
+    }
+  }
+  const overlay = document.getElementById('editOverlay');
+  overlay.style.display = 'flex';
+  setTimeout(() => document.getElementById('editServiceInp').focus(), 80);
+}
+
+function closeEditModal() {
+  document.getElementById('editOverlay').style.display = 'none';
+  editCtx = null;
+}
+
+function confirmEditTurn() {
+  if (!editCtx) return;
+  const newSvc = document.getElementById('editServiceInp').value.trim().toUpperCase();
+  if (!newSvc) { showToast('⚠ Nhập dịch vụ'); return; }
+  const td = state.techs[editCtx.name];
+  if (editCtx.kind === 'bonus') {
+    td.bonuses[editCtx.idx].service = newSvc;
+    td.bonuses[editCtx.idx].isFree = document.getElementById('editFreeToggle').checked;
+  } else {
+    const t = td.turns[editCtx.idx];
+    const wasHalf = t.waitingPair;
+    t.service = newSvc;
+    // Nếu sửa thành không có "/" nữa thì không còn là half
+    if (wasHalf && !isHalf(newSvc)) { t.waitingPair = false; t.num = ++state.turnCounter[editCtx.name] || 1; }
+    // Nếu sửa thành có "/" thì chuyển về half
+    if (!wasHalf && isHalf(newSvc)) { t.waitingPair = true; t.num = '½'; }
+  }
+  showToast(`✓ Đã sửa → ${newSvc}`);
+  closeEditModal();
+  renderFD(); renderBoard();
+  if (state.techSelected === editCtx?.name) renderTechView();
+}
+
+function deleteEditTurn() {
+  if (!editCtx) return;
+  const td = state.techs[editCtx.name];
+  if (editCtx.kind === 'bonus') {
+    td.bonuses.splice(editCtx.idx, 1);
+    showToast('Đã xoá bonus turn');
+  } else {
+    td.turns.splice(editCtx.idx, 1);
+    // Recalculate turn numbers for full turns
+    let n = 1;
+    td.turns.forEach(t => { if (!t.waitingPair) t.num = n++; });
+    state.turnCounter[editCtx.name] = n - 1;
+    // If no turns left, set READY
+    if (!td.turns.length && !td.bonuses.length) td.status = 'READY';
+    showToast('Đã xoá turn');
+  }
+  closeEditModal();
+  renderFD(); renderBoard();
+  if (state.techSelected === editCtx?.name) renderTechView();
+}
+
+function skipEditTurn() {
+  if (!editCtx || editCtx.kind !== 'turn') return;
+  const td = state.techs[editCtx.name];
+  const t  = td.turns[editCtx.idx];
+  t.isSkip = !t.isSkip; // toggle
+  if (t.isSkip) {
+    t.done = true; // treat as done so active turn advances
+    showToast(`✕ Skip: ${t.service} — ${editCtx.name}`);
+    apiPost({ action:'skipTurn', turnId: t.id, isSkip: true });
+  } else {
+    t.done = false;
+    showToast(`↩ Undo skip: ${t.service} — ${editCtx.name}`);
+    apiPost({ action:'skipTurn', turnId: t.id, isSkip: false });
+  }
+  closeEditModal();
+  renderFD(); renderBoard();
+  if (state.techSelected === editCtx?.name) renderTechView();
+}
+
+document.getElementById('editServiceInp').addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmEditTurn();
+  if (e.key === 'Escape') closeEditModal();
+});
+document.getElementById('editOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('editOverlay')) closeEditModal();
+});
+
+// ── SETTINGS / TECH MANAGEMENT ──────────────────────────────────────
+function renderSettings() {
+  const list = document.getElementById('settingsTechList');
+  const count = document.getElementById('techCount');
+  count.textContent = techList.filter(t => t.active).length + ' active / ' + techList.length + ' total';
+
+  list.innerHTML = techList.map((t, i) => `
+    <div class="tech-list-item ${t.active?'':'inactive'}">
+      <div class="tech-item-order">${t.active ? '#' + (techList.slice(0,i).filter(x=>x.active).length+1) : '—'}</div>
+      <div class="tech-item-name">${t.name}</div>
+      ${i > 0
+        ? `<button class="tl-btn up" onclick="moveTech(${i},-1)" title="Lên">↑</button>`
+        : '<div style="width:34px"></div>'}
+      ${i < techList.length-1
+        ? `<button class="tl-btn up" onclick="moveTech(${i},1)" title="Xuống">↓</button>`
+        : '<div style="width:34px"></div>'}
+      <button class="tl-btn" onclick="toggleTech(${i})">${t.active ? 'Ẩn' : 'Hiện'}</button>
+      <button class="tl-btn danger" onclick="deleteTech(${i})" title="Xoá hẳn">✕</button>
+    </div>
+  `).join('');
+}
+
+function addTech() {
+  const inp = document.getElementById('newTechInp');
+  const name = inp.value.trim().toUpperCase();
+  if (!name) { showToast('⚠ Nhập tên thợ'); return; }
+  if (techList.find(t => t.name === name)) { showToast('⚠ Tên này đã có rồi'); return; }
+  techList.push({ name, active: true });
+  saveTechList(techList);
+  inp.value = '';
+  renderSettings();
+  showToast(`✓ Đã thêm ${name}`);
+}
+
+function toggleTech(idx) {
+  techList[idx].active = !techList[idx].active;
+  saveTechList(techList);
+  renderSettings();
+  const t = techList[idx];
+  showToast(t.active ? `✓ ${t.name} hiện trở lại` : `${t.name} đã ẩn`);
+}
+
+function deleteTech(idx) {
+  const t = techList[idx];
+  if (!confirm(`Xoá hẳn ${t.name} khỏi danh sách?\nHành động này không thể hoàn tác.`)) return;
+  techList.splice(idx, 1);
+  saveTechList(techList);
+  renderSettings();
+  showToast(`Đã xoá ${t.name}`);
+}
+
+function moveTech(idx, dir) {
+  const target = idx + dir;
+  if (target < 0 || target >= techList.length) return;
+  [techList[idx], techList[target]] = [techList[target], techList[idx]];
+  saveTechList(techList);
+  renderSettings();
+}
+
+document.getElementById('newTechInp').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addTech();
+});
+
+// ── HISTORY ──────────────────────────────────────────────────────────
+async function initHistory() {
+  // Populate month selector (last 6 months)
+  const sel = document.getElementById('histMonthSel');
+  const now = new Date();
+  sel.innerHTML = '';
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const val = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    const label = d.toLocaleDateString('vi-VN',{month:'long',year:'numeric'});
+    sel.innerHTML += `<option value="${val}">${label}</option>`;
+  }
+  loadHistMonth();
+}
+
+async function loadHistMonth() {
+  const month = document.getElementById('histMonthSel').value;
+  const daySel = document.getElementById('histDaySel');
+  daySel.innerHTML = '<option value="">Đang tải...</option>';
+  document.getElementById('histContent').innerHTML = '<div style="color:var(--text-muted);font-size:12px">Đang tải danh sách ngày...</div>';
+
+  if (!API_URL) {
+    daySel.innerHTML = '<option value="">Chưa kết nối Sheets</option>';
+    document.getElementById('histContent').innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:20px 0">Cần kết nối Google Sheets để xem lịch sử.<br>Nhập Web App URL vào ô cài đặt.</div>';
+    return;
+  }
+
+  const data = await apiGet({ action:'getMonthDates', month });
+  daySel.innerHTML = '';
+  if (!data || !data.dates || !data.dates.length) {
+    daySel.innerHTML = '<option value="">Không có data</option>';
+    document.getElementById('histContent').innerHTML = '<div style="color:var(--text-muted);font-size:12px">Tháng này chưa có data</div>';
+    return;
+  }
+  data.dates.forEach(d => {
+    const label = new Date(d+'T00:00:00').toLocaleDateString('vi-VN',{weekday:'short',day:'2-digit',month:'2-digit'});
+    daySel.innerHTML += `<option value="${d}">${label} (${d})</option>`;
+  });
+  loadHistDay();
+}
+
+async function loadHistDay() {
+  const date = document.getElementById('histDaySel').value;
+  if (!date) return;
+  const content = document.getElementById('histContent');
+  content.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Đang tải...</div>';
+
+  const data = await apiGet({ action:'getHistory', date });
+  if (!data || !data.techs) { content.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Không có data</div>'; return; }
+
+  const dateLabel = new Date(date+'T00:00:00').toLocaleDateString('vi-VN',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'});
+  let html = `<div class="hist-date-badge">${dateLabel}</div>`;
+
+  if (!data.techs.length) { content.innerHTML = html + '<div style="color:var(--text-muted);font-size:12px">Ngày này không có check-in nào</div>'; return; }
+
+  html += '<table class="hist-table"><thead><tr><th>#</th><th style="color:#f59e0b">BONUS / FREE</th><th>TÊN THỢ</th><th>TURNS</th></tr></thead><tbody>';
+  data.techs.forEach(tech => {
+    const bonusChips = (tech.bonuses||[]).map(b => {
+      const c = b.isFree ? '#60a5fa' : '#f59e0b';
+      const icon = b.isFree ? '☀' : '★';
+      return `<span style="font-size:10px;padding:2px 5px;border-radius:4px;border:1px solid ${c};color:${c};margin:1px">${icon} ${b.service}</span>`;
+    }).join('');
+    const turnChips = (tech.turns||[]).map(t => {
+      const col = t.done ? 'rgba(74,222,128,.5)' : t.waitingPair ? '#a78bfa' : '#e8c4a0';
+      const label = t.waitingPair ? '½' : `T${t.num}`;
+      return `<span style="font-size:10px;padding:2px 5px;border-radius:4px;border:1px solid var(--border);color:${col};margin:1px">${label} ${t.service}</span>`;
+    }).join('');
+    html += `<tr>
+      <td><div style="padding:8px 4px 8px 8px;font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--accent)">#${tech.order}</div></td>
+      <td><div style="padding:6px 5px;display:flex;flex-wrap:wrap;gap:3px;min-width:80px">${bonusChips||'<span style="color:var(--text-muted);font-size:11px;padding:4px">—</span>'}</div></td>
+      <td><div style="padding:8px;font-size:13px;font-weight:500;white-space:nowrap">${tech.name}<br><span style="font-size:10px;color:var(--text-muted)">${tech.checkInTime}</span></div></td>
+      <td><div style="padding:6px 5px;display:flex;flex-wrap:wrap;gap:3px">${turnChips||'<span style="color:var(--text-muted);font-size:11px;padding:4px">—</span>'}</div></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  content.innerHTML = html;
+}
+
+// TOAST
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+document.getElementById('inpService').addEventListener('keydown', e => { if (e.key==='Enter') assignTurn(); });
+
+// ── SETUP SCREEN (shown when no API_URL) ─────────────────────────────
+function showSetupScreen() {
+  document.querySelector('nav').style.display = 'none';
+  document.querySelectorAll('.view').forEach(v => v.style.display='none');
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="setupScreen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 20px">
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:36px;letter-spacing:6px;color:var(--accent);margin-bottom:6px">VARNISHLAB</div>
+      <div style="font-size:10px;letter-spacing:3px;color:var(--text-muted);margin-bottom:40px">TURN BOARD SYSTEM</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;width:100%;max-width:400px">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--text-muted);margin-bottom:16px;text-transform:uppercase">Kết Nối Google Sheets</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;line-height:1.7;padding:10px 12px;background:var(--surface2);border-radius:8px;border-left:2px solid var(--accent2)">
+          Paste <b style="color:var(--text)">Web App URL</b> từ Google Apps Script vào đây.<br>
+          Xem file <b style="color:var(--text)">Setup_Guide_v2.pdf</b> để biết cách lấy URL.
+        </div>
+        <input id="setupUrlInp" placeholder="https://script.google.com/macros/s/..." style="width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;outline:none;margin-bottom:12px" />
+        <div style="font-size:10px;letter-spacing:2px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase">Màn Hình Này Là</div>
+        <select id="setupRoleSel" style="width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;outline:none;margin-bottom:16px;appearance:none">
+          <option value="fd">💻  FD — Chia Turn (máy tính bàn)</option>
+          <option value="checkin">📱  Check-in (iPad thợ)</option>
+          <option value="board">📺  Board (TV tiệm)</option>
+          <option value="tech">📱  Thợ — Xem Turn (phone)</option>
+        </select>
+        <button onclick="applySetup()" style="width:100%;padding:13px;background:var(--accent);color:#0e0e0f;border:none;border-radius:8px;font-family:'Syne',sans-serif;font-weight:800;font-size:14px;letter-spacing:3px;cursor:pointer">VÀO ỨNG DỤNG</button>
+        <div style="text-align:center;margin-top:12px">
+          <span onclick="applySetup(true)" style="font-size:11px;color:var(--text-muted);cursor:pointer;text-decoration:underline">Dùng thử offline (không sync)</span>
+        </div>
+      </div>
+    </div>
+  `);
+  document.getElementById('setupUrlInp').focus();
+  document.getElementById('setupUrlInp').addEventListener('keydown', e => { if(e.key==='Enter') applySetup(); });
+}
+
+function applySetup(offline=false) {
+  const url  = (document.getElementById('setupUrlInp')?.value||'').trim();
+  const role = document.getElementById('setupRoleSel')?.value || 'fd';
+  if (!offline && !url) { showToast('⚠ Nhập Web App URL'); return; }
+  if (url) {
+    localStorage.setItem('vnl_api', url);
+    API_URL = url;
+  }
+  // Redirect to same page with role + api in URL so bookmark works
+  if (url) {
+    const newUrl = window.location.pathname + '?role=' + role + '&api=' + encodeURIComponent(url);
+    window.history.replaceState({}, '', newUrl);
+  }
+  document.getElementById('setupScreen')?.remove();
+  document.querySelector('nav').style.display = '';
+  document.querySelectorAll('.view').forEach(v => v.style.display='');
+  launchApp(role);
+}
+
+function showApiSetup() {
+  const url = prompt('Web App URL (để trống = xoá kết nối):', API_URL);
+  if (url === null) return;
+  if (url.trim()) {
+    localStorage.setItem('vnl_api', url.trim());
+    API_URL = url.trim();
+    showToast('✓ Đã cập nhật URL — đang kết nối...');
+    if (_syncInterval) { clearInterval(_syncInterval); _syncInterval = null; }
+    startSync();
+  } else {
+    localStorage.removeItem('vnl_api');
+    API_URL = '';
+    showToast('Đã xoá kết nối');
+  }
+}
+
+// Add settings button to nav
+document.querySelector('.logo').insertAdjacentHTML('afterend',
+  '<button onclick="showApiSetup()" style="padding:5px 10px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:1px;cursor:pointer;flex-shrink:0" title="Cài đặt kết nối Sheets">⚙</button>'
+);
+
+// ── LAUNCH: switch to right tab based on role ─────────────────────────
+function launchApp(role) {
+  document.body.classList.add('role-'+(role||'fd'));
+  if (role === 'board') {
+    switchView('board');
+  } else if (role === 'checkin') {
+    switchView('checkin');
+  } else if (role === 'tech') {
+    switchView('tech');
+  } else {
+    switchView('fd');
+  }
+}
+
+// ── BOOT ─────────────────────────────────────────────────────────────
+loadApiUrl();
+const _role = getRole();
+
+if (!API_URL) {
+  // First time: show setup screen
+  // Pre-select role from URL if present
+  window.addEventListener('load', () => {
+    showSetupScreen();
+    if (_role && document.getElementById('setupRoleSel')) {
+      document.getElementById('setupRoleSel').value = _role;
+    }
+  });
+} else {
+  // Already configured: launch directly
+  window.addEventListener('load', () => {
+    renderCheckIn();
+    renderFD();
+    launchApp(_role || 'fd');
+    startSync();
+  });
+}
+</script>
+</body>
+</html>
